@@ -1,0 +1,546 @@
+package main
+
+/*
+====================================================
+ PROYECTO: Biblioteca Digital - API + Web
+----------------------------------------------------
+Este programa levanta un servidor web en Go que:
+
+1) Sirve una página web moderna en "/"
+2) Expone un endpoint JSON en "/api/books"
+
+La página consume la API usando fetch() y muestra
+los datos dinámicamente con buscador y filtros.
+====================================================
+*/
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+)
+
+// ====================================================
+//  MODELO DE DATOS
+// ----------------------------------------------------
+// Representa la estructura de un libro en la API.
+// Las etiquetas json permiten serializar correctamente.
+// ====================================================
+
+type Book struct {
+	ID        int       json:"id"
+	Title     string    json:"title"
+	Author    string    json:"author"
+	Format    string    json:"format"
+	FilePath  string    json:"file_path"
+	CreatedAt time.Time json:"created_at"
+	UpdatedAt time.Time json:"updated_at"
+}
+
+// ====================================================
+//  DATOS SIMULADOS
+// ----------------------------------------------------
+// Simula una base de datos.
+// En un proyecto real, aquí se conectaría a
+// PostgreSQL, MySQL o MongoDB.
+// ====================================================
+
+var books = []Book{
+	{1, "El Aleph", "Jorge Luis Borges", "epub", "C:/ebooks/el_aleph.epub", time.Now().Add(-200 * time.Hour), time.Now().Add(-2 * time.Hour)},
+	{2, "Cien años de soledad", "Gabriel García Márquez", "pdf", "https://ejemplo.com/cien.pdf", time.Now().Add(-300 * time.Hour), time.Now().Add(-6 * time.Hour)},
+	{3, "Don Quijote de la Mancha", "Miguel de Cervantes", "epub", "https://ejemplo.com/quijote.epub", time.Now().Add(-500 * time.Hour), time.Now().Add(-20 * time.Hour)},
+	{4, "1984", "George Orwell", "pdf", "https://ejemplo.com/1984.pdf", time.Now().Add(-720 * time.Hour), time.Now().Add(-50 * time.Hour)},
+	{5, "El Hobbit", "J.R.R. Tolkien", "azw3", "C:/ebooks/hobbit.azw3", time.Now().Add(-600 * time.Hour), time.Now().Add(-60 * time.Hour)},
+}
+
+// ====================================================
+//  FUNCIÓN PRINCIPAL
+// ----------------------------------------------------
+// Configura el servidor HTTP y define las rutas.
+// ====================================================
+
+func main() {
+
+	// Crear router
+	mux := http.NewServeMux()
+
+	// Ruta principal (HTML)
+	mux.HandleFunc("/", serveHome)
+
+	// Endpoint API JSON
+	mux.HandleFunc("/api/books", serveAPI)
+
+	fmt.Println("Servidor ejecutándose en http://localhost:8080")
+
+	// Iniciar servidor
+	if err := http.ListenAndServe(":8080", mux); err != nil {
+		panic(err)
+	}
+}
+
+// ====================================================
+//  HANDLER: API JSON
+// ----------------------------------------------------
+// Devuelve la lista de libros en formato JSON.
+// Método permitido: GET
+// ====================================================
+
+func serveAPI(w http.ResponseWriter, r *http.Request) {
+
+	// Validar método HTTP
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Indicar que la respuesta es JSON
+	w.Header().Set("Content-Type", "application/json")
+
+	// Convertir slice a JSON y enviarlo
+	_ = json.NewEncoder(w).Encode(books)
+}
+
+// ====================================================
+//  HANDLER: Página Web
+// ----------------------------------------------------
+// Devuelve el HTML que contiene el diseño moderno,
+// buscador y lógica JavaScript.
+// ====================================================
+
+func serveHome(w http.ResponseWriter, r *http.Request) {
+
+	// Solo permitir acceso a la raíz exacta
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Renderizar página
+	fmt.Fprint(w, pageHTML)
+}
+
+// ====================================================
+//  PLANTILLA HTML
+// ----------------------------------------------------
+// Contiene:
+// - Diseño moderno
+// - Buscador en vivo
+// - Filtro por formato
+// - Modo oscuro
+// - Consumo dinámico de la API
+// ====================================================
+
+const pageHTML = `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Biblioteca Digital</title>
+  <style>
+    :root{
+      --bg: #0b1220;
+      --panel: rgba(255,255,255,.06);
+      --panel2: rgba(255,255,255,.08);
+      --stroke: rgba(255,255,255,.12);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.65);
+      --accent: #7c5cff;
+      --accent2: #38bdf8;
+      --danger: #ff4d6d;
+      --shadow: 0 18px 60px rgba(0,0,0,.35);
+      --radius: 18px;
+    }
+    [data-theme="light"]{
+      --bg: #f6f7fb;
+      --panel: rgba(255,255,255,.85);
+      --panel2: rgba(255,255,255,.95);
+      --stroke: rgba(15,23,42,.12);
+      --text: rgba(15,23,42,.92);
+      --muted: rgba(15,23,42,.62);
+      --accent: #5b5cff;
+      --accent2: #0ea5e9;
+      --shadow: 0 18px 60px rgba(2,6,23,.10);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+      color:var(--text);
+      background: radial-gradient(1000px 500px at 20% -10%, rgba(124,92,255,.35), transparent 60%),
+                  radial-gradient(900px 500px at 90% 0%, rgba(56,189,248,.28), transparent 55%),
+                  radial-gradient(1100px 700px at 50% 110%, rgba(124,92,255,.22), transparent 65%),
+                  var(--bg);
+      min-height:100vh;
+    }
+    .wrap{max-width:1100px;margin:0 auto;padding:28px 16px 42px}
+    .header{
+      display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;
+      margin-bottom:16px;
+    }
+    .title h1{margin:0;font-size:26px;letter-spacing:.2px}
+    .title p{margin:6px 0 0;color:var(--muted);max-width:720px;line-height:1.35}
+    .pillrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:8px 10px;border-radius:999px;
+      background:var(--panel);border:1px solid var(--stroke);
+      color:var(--muted);font-size:12px
+    }
+    .pill b{color:var(--text);font-weight:600}
+    .actions{display:flex;gap:10px;align-items:center}
+    .btn{
+      border:1px solid var(--stroke);
+      background:var(--panel);
+      color:var(--text);
+      padding:10px 12px;border-radius:14px;
+      cursor:pointer;
+      box-shadow: var(--shadow);
+      transition: transform .08s ease, background .2s ease, border-color .2s ease;
+      user-select:none;
+    }
+    .btn:hover{transform: translateY(-1px); background: var(--panel2); border-color: rgba(124,92,255,.35)}
+    .btn:active{transform: translateY(0px)}
+    .card{
+      background:var(--panel);
+      border:1px solid var(--stroke);
+      border-radius:var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      backdrop-filter: blur(10px);
+    }
+    .toolbar{
+      display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+      padding:14px;
+      border-bottom:1px solid var(--stroke);
+      background:linear-gradient(to bottom, rgba(255,255,255,.03), transparent);
+    }
+    .field{
+      display:flex;align-items:center;gap:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid var(--stroke);
+      background:var(--panel2);
+      min-width:260px;
+      flex:1;
+    }
+    .field input{
+      width:100%;
+      border:0;outline:none;
+      background:transparent;
+      color:var(--text);
+      font-size:14px;
+    }
+    .select{
+      padding:10px 12px;border-radius:14px;
+      border:1px solid var(--stroke);
+      background:var(--panel2);
+      color:var(--text);
+      outline:none;
+      min-width:180px;
+    }
+    .meta{
+      margin-left:auto;
+      color:var(--muted);
+      font-size:13px;
+      display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+    }
+    .badge{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:8px 10px;border-radius:999px;
+      border:1px solid var(--stroke);
+      background:rgba(124,92,255,.14);
+      color:var(--text);
+      font-weight:600;
+    }
+    .tablewrap{overflow:auto}
+    table{width:100%;border-collapse:collapse;min-width:860px}
+    thead th{
+      position:sticky;top:0;z-index:1;
+      text-align:left;
+      font-size:12px;
+      letter-spacing:.4px;
+      text-transform:uppercase;
+      color:var(--muted);
+      background:rgba(0,0,0,.10);
+      backdrop-filter: blur(12px);
+      border-bottom:1px solid var(--stroke);
+      padding:12px 14px;
+    }
+    [data-theme="light"] thead th{background:rgba(255,255,255,.7)}
+    tbody td{
+      padding:12px 14px;
+      border-bottom:1px solid var(--stroke);
+      vertical-align:top;
+      color:var(--text);
+      font-size:14px;
+    }
+    tbody tr:hover td{background:rgba(124,92,255,.08)}
+    .tag{
+      display:inline-flex;align-items:center;gap:6px;
+      font-size:12px;font-weight:600;
+      padding:4px 10px;border-radius:999px;
+      border:1px solid var(--stroke);
+      background:rgba(56,189,248,.12);
+      color:var(--text);
+      white-space:nowrap;
+    }
+    a{color:var(--accent2);text-decoration:none}
+    a:hover{text-decoration:underline}
+    .muted{color:var(--muted)}
+    .empty{
+      padding:22px 14px;
+      color:var(--muted);
+      text-align:center;
+    }
+    .footer{
+      margin-top:14px;
+      color:var(--muted);
+      font-size:12px;
+      display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    }
+    .kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size:12px;
+      padding:2px 8px;border-radius:10px;
+      border:1px solid var(--stroke);
+      background:var(--panel);
+      color:var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="title">
+        <h1>📚 Biblioteca digital</h1>
+        <p>Presentación moderna con buscador y filtro. Los datos se cargan desde <span class="kbd">/api/books</span>.</p>
+        <div class="pillrow">
+          <span class="pill">Estado: <b id="status">cargando…</b></span>
+          <span class="pill">API: <a href="/api/books" target="_blank" rel="noopener">ver JSON</a></span>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="themeBtn" type="button" aria-label="Cambiar tema">🌙 Tema</button>
+        <button class="btn" id="reloadBtn" type="button">↻ Recargar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <div class="field" title="Buscar por título, autor, formato o archivo">
+          🔎
+          <input id="q" placeholder="Buscar… (Ej: Borges, pdf, Hobbit)" autocomplete="off" />
+        </div>
+
+        <select class="select" id="fmt">
+          <option value="">Todos los formatos</option>
+        </select>
+
+        <div class="meta">
+          <span class="badge"><span id="shown">0</span> / <span id="total">0</span></span>
+          <span class="muted">Tip: <span class="kbd">Ctrl</span> + <span class="kbd">K</span></span>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:70px">ID</th>
+              <th>Título</th>
+              <th style="width:220px">Autor</th>
+              <th style="width:110px">Formato</th>
+              <th>Archivo</th>
+              <th style="width:190px">Actualizado</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="6" class="empty">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div>Hecho para presentar: UI moderna + búsqueda + filtro.</div>
+      <div class="muted">Si quieres, le meto paginación y orden por columnas.</div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  var state = {
+    all: [],
+    filtered: [],
+    q: '',
+    fmt: ''
+  };
+
+  var rows = document.getElementById('rows');
+  var qInput = document.getElementById('q');
+  var fmtSel = document.getElementById('fmt');
+  var totalEl = document.getElementById('total');
+  var shownEl = document.getElementById('shown');
+  var statusEl = document.getElementById('status');
+  var reloadBtn = document.getElementById('reloadBtn');
+  var themeBtn = document.getElementById('themeBtn');
+
+  // Tema (persistente)
+  var savedTheme = localStorage.getItem('theme');
+  if(savedTheme === 'light'){ document.documentElement.setAttribute('data-theme','light'); themeBtn.textContent = '☀️ Tema'; }
+  else { document.documentElement.removeAttribute('data-theme'); themeBtn.textContent = '🌙 Tema'; }
+
+  themeBtn.addEventListener('click', function(){
+    var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    if(isLight){
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('theme','dark');
+      themeBtn.textContent = '🌙 Tema';
+    } else {
+      document.documentElement.setAttribute('data-theme','light');
+      localStorage.setItem('theme','light');
+      themeBtn.textContent = '☀️ Tema';
+    }
+  });
+
+  // Atajo Ctrl+K para enfocar buscador
+  document.addEventListener('keydown', function(e){
+    if((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')){
+      e.preventDefault();
+      qInput.focus();
+      qInput.select();
+    }
+  });
+
+  reloadBtn.addEventListener('click', function(){ load(); });
+
+  qInput.addEventListener('input', function(){
+    state.q = (qInput.value || '').trim().toLowerCase();
+    apply();
+  });
+
+  fmtSel.addEventListener('change', function(){
+    state.fmt = (fmtSel.value || '').trim().toLowerCase();
+    apply();
+  });
+
+  function load(){
+    statusEl.textContent = 'cargando…';
+    rows.innerHTML = '<tr><td colspan="6" class="empty">Cargando…</td></tr>';
+
+    fetch('/api/books')
+      .then(function(res){
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function(data){
+        if(!Array.isArray(data)) data = [];
+        state.all = data.slice();
+        totalEl.textContent = String(state.all.length);
+
+        buildFormats(state.all);
+        statusEl.textContent = 'ok';
+        apply();
+      })
+      .catch(function(err){
+        statusEl.textContent = 'error';
+        rows.innerHTML = '<tr><td colspan="6" class="empty" style="color:#ff4d6d">Error: ' + escapeHtml(String(err)) + '</td></tr>';
+        totalEl.textContent = '0';
+        shownEl.textContent = '0';
+      });
+  }
+
+  function buildFormats(list){
+    var set = {};
+    for(var i=0;i<list.length;i++){
+      var f = (list[i].format || '').toString().toLowerCase().trim();
+      if(f) set[f] = true;
+    }
+    var formats = Object.keys(set).sort();
+
+    // Mantener "Todos"
+    while(fmtSel.options.length > 1) fmtSel.remove(1);
+
+    for(var j=0;j<formats.length;j++){
+      var opt = document.createElement('option');
+      opt.value = formats[j];
+      opt.textContent = formats[j].toUpperCase();
+      fmtSel.appendChild(opt);
+    }
+  }
+
+  function apply(){
+    var q = state.q;
+    var fmt = state.fmt;
+
+    state.filtered = state.all.filter(function(b){
+      var title = (b.title || '').toString().toLowerCase();
+      var author = (b.author || '').toString().toLowerCase();
+      var format = (b.format || '').toString().toLowerCase();
+      var file = (b.file_path || '').toString().toLowerCase();
+
+      if(fmt && format !== fmt) return false;
+
+      if(!q) return true;
+      return title.indexOf(q) !== -1 ||
+             author.indexOf(q) !== -1 ||
+             format.indexOf(q) !== -1 ||
+             file.indexOf(q) !== -1 ||
+             String(b.id || '').indexOf(q) !== -1;
+    });
+
+    render(state.filtered);
+  }
+
+  function render(list){
+    shownEl.textContent = String(list.length);
+
+    if(!list.length){
+      rows.innerHTML = '<tr><td colspan="6" class="empty">No hay resultados.</td></tr>';
+      return;
+    }
+
+    rows.innerHTML = list.map(function(b){
+      var file = (b.file_path || '');
+      var isUrl = startsWith(file, 'http://') || startsWith(file, 'https://');
+      var link = isUrl
+        ? '<a href="' + escapeHtml(file) + '" target="_blank" rel="noopener">abrir</a>'
+        : '<span class="muted">' + escapeHtml(file) + '</span>';
+
+      var updated = b.updated_at ? new Date(b.updated_at).toLocaleString() : '';
+
+      return '' +
+        '<tr>' +
+          '<td>' + escapeHtml(b.id ?? '') + '</td>' +
+          '<td>' + escapeHtml(b.title ?? '') + '</td>' +
+          '<td>' + escapeHtml(b.author ?? '') + '</td>' +
+          '<td><span class="tag">' + escapeHtml((b.format ?? '').toString().toUpperCase()) + '</span></td>' +
+          '<td>' + link + '</td>' +
+          '<td class="muted">' + escapeHtml(updated) + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function escapeHtml(s){
+    return String(s)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'","&#39;");
+  }
+
+  function startsWith(s, prefix){
+    s = (s || '').toString().toLowerCase();
+    prefix = (prefix || '').toString().toLowerCase();
+    return s.slice(0, prefix.length) === prefix;
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>`
